@@ -360,18 +360,43 @@ class AdaptiveIntegrator:
     def integrate_simple(self, pos0: np.ndarray, vel0: np.ndarray,
                          t_span: tuple, M_central: float = M_SUN,
                          dt_hint: float = None) -> dict:
-        """Simplified integration for validation tests (no thrust, single body)."""
-        def no_thrust(t, pos, vel, mass):
-            return np.zeros(3), 0.0
+        """Simplified integration for validation tests (no thrust, single body).
 
-        y0 = np.zeros(7)
-        y0[0:3] = pos0
-        y0[3:6] = vel0
-        y0[6] = 1.0  # dummy mass
+        Uses a single solve_ivp call for the whole time span (much faster than
+        the step-by-step integrate() method for long integrations like 43-year
+        Voyager or 100-year Alpha Cen).
+        """
+        def deriv(t, y):
+            pos = y[0:3]
+            vel = y[3:6]
+            a = pn1_acceleration(pos, vel, M_central)
+            return np.concatenate([vel, a])
 
-        M_bodies = [(M_central, np.zeros(3))]
+        y0 = np.concatenate([pos0, vel0])
 
-        return self.integrate(y0, t_span, no_thrust, M_bodies)
+        # Use DOP853 (8th-order) with high precision in a single call
+        t_start, t_end = t_span
+        duration = t_end - t_start
+        # Adaptive max_step: ~1/100 of total duration, capped at 1 day
+        max_step = min(duration / 100.0, 86400.0)
+
+        sol = solve_ivp(deriv, t_span, y0, method='DOP853',
+                        rtol=1e-12, atol=1e-15, max_step=max_step,
+                        dense_output=True)
+
+        if not sol.success:
+            # Fallback with relaxed tolerances
+            sol = solve_ivp(deriv, t_span, y0, method='RK45',
+                            rtol=1e-10, atol=1e-13, max_step=max_step)
+
+        return {
+            "t": sol.t,
+            "pos": sol.y[0:3].T,
+            "vel": sol.y[3:6].T,
+            "mass": np.ones(len(sol.t)),
+            "tiers": [1] * max(len(sol.t) - 1, 0),
+            "n_steps": len(sol.t),
+        }
 
 
 def compute_specific_energy(pos: np.ndarray, vel: np.ndarray,
