@@ -283,6 +283,8 @@ class AdaptiveIntegrator:
         tiers = []
 
         step = 0
+        fail_count = 0
+        retry_dt = None  # Tracks reduced dt across loop iterations on failure
         while t_current < t_end and step < max_steps:
             # Determine current tier
             v_mag = np.linalg.norm(y_current[3:6])
@@ -294,8 +296,11 @@ class AdaptiveIntegrator:
             else:
                 tier = 1
 
-            # Select timestep and derivatives function
-            dt = self.TIER_DT[tier]
+            # Select timestep: use retry_dt if retrying after failure, else default
+            if retry_dt is not None:
+                dt = retry_dt
+            else:
+                dt = self.TIER_DT[tier]
             dt = min(dt, t_end - t_current)
 
             if tier == 1:
@@ -329,10 +334,15 @@ class AdaptiveIntegrator:
                 velocities.append(y_current[3:6].copy())
                 masses.append(y_current[6])
                 tiers.append(tier)
+
+                # Reset retry state on success
+                retry_dt = None
+                fail_count = 0
             else:
                 # If integration fails, try smaller step
-                dt *= 0.1
-                if dt < 1e-6:
+                retry_dt = dt * 0.1
+                fail_count += 1
+                if retry_dt < 1e-6 or fail_count > 10:
                     break
                 continue
 

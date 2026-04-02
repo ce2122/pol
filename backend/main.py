@@ -604,6 +604,10 @@ async def compile_mission(req: CompileRequest):
 async def download_output(run_id: str, filename: str):
     """Download a generated output file."""
     file_path = os.path.join(OUTPUT_DIR, run_id, filename)
+    # Prevent path traversal by ensuring resolved path is within OUTPUT_DIR
+    file_path = os.path.realpath(file_path)
+    if not file_path.startswith(os.path.realpath(OUTPUT_DIR) + os.sep):
+        raise HTTPException(403, "Access denied")
     if not os.path.exists(file_path):
         raise HTTPException(404, f"File not found: {filename}")
     return FileResponse(file_path, filename=filename)
