@@ -296,17 +296,29 @@ async def run_validation():
     # Convert to JSON-serializable format
     test_results = []
     for r in result["results"]:
+        # Ensure all numpy types are converted to native Python types
+        details = {}
+        for k, v in (r.details or {}).items():
+            if isinstance(v, (np.floating, float)):
+                details[k] = float(v)
+            elif isinstance(v, (np.integer, int)):
+                details[k] = int(v)
+            elif isinstance(v, (np.bool_, bool)):
+                details[k] = bool(v)
+            elif isinstance(v, np.ndarray):
+                details[k] = v.tolist()
+            else:
+                details[k] = str(v) if not isinstance(v, str) else v
         test_results.append({
-            "test_id": r.test_id,
-            "test_name": r.test_name,
-            "description": r.description,
-            "required": r.required,
-            "computed": r.computed,
-            "expected": r.expected,
-            "error": r.error,
-            "passed": r.passed,
-            "details": {k: float(v) if isinstance(v, (np.floating, float)) else v
-                       for k, v in (r.details or {}).items()},
+            "test_id": str(r.test_id),
+            "test_name": str(r.test_name),
+            "description": str(r.description),
+            "required": str(r.required),
+            "computed": str(r.computed),
+            "expected": str(r.expected),
+            "error": str(r.error),
+            "passed": bool(r.passed),
+            "details": details,
         })
 
     _validation_cache = {
@@ -315,7 +327,7 @@ async def run_validation():
     }
 
     return {
-        "all_passed": result["all_passed"],
+        "all_passed": bool(result["all_passed"]),
         "tests": test_results,
     }
 
@@ -323,7 +335,7 @@ async def run_validation():
 @app.get("/api/validation/status")
 async def validation_status():
     """Get current validation status."""
-    return {"all_passed": _validation_cache["all_passed"]}
+    return {"all_passed": bool(_validation_cache["all_passed"])}
 
 
 # ── ISM ─────────────────────────────────────────
@@ -558,7 +570,7 @@ async def compile_mission(req: CompileRequest):
         "time_yr": (frac * best.earth_transit_yr).tolist(),
         "velocity_frac_c": (best.peak_beta * np.sin(frac * np.pi)).tolist(),
         "fuel_fraction": np.maximum(0, 1 - best.fuel_fraction * 2 * frac * (1 - np.abs(frac - 0.5) * 0.5)).tolist(),
-        "shield_fraction": shield_arr.tolist(),
+        "shield_fraction": np.interp(np.linspace(0, 1, n_traj), np.linspace(0, 1, len(shield_arr)), shield_arr).tolist(),
         "xnav_error_au": (xnav_err * frac * (1 + 0.3 * np.sin(frac * 10))).tolist(),
     }
 

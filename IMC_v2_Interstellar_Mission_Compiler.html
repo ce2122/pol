@@ -2057,6 +2057,7 @@ async function _clientSideCompilation(r) {
 }
 
 function _finishCompilation(r) {
+  setProgress(100);
   const N = 60;
   const tData=[], vData=[], fData=[], sData=[], xData=[];
   for (let i=0; i<=N; i++) {
