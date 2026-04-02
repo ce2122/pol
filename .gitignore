@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+backend/data/*.db
+backend/output/
+*.egg-info/
+.eggs/
+dist/
+build/
